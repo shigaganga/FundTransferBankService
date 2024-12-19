@@ -20,13 +20,11 @@ public class FundTransfer {
     @GeneratedValue(strategy = GenerationType.IDENTITY) // SERIAL equivalent for auto-increment
     private Long transferId;
 
-    @ManyToOne
-    @JoinColumn(name = "sender_account_id", nullable = false) // Foreign Key to Account
-    private Account senderAccount;
+    @Column(name = "sender_account_id", nullable = false)
+    private Long senderAccountId; // Replace Account entity with sender account ID
 
-    @ManyToOne
-    @JoinColumn(name = "receiver_account_id", nullable = false) // Foreign Key to Account
-    private Account receiverAccount;
+    @Column(name = "receiver_account_id", nullable = false)
+    private Long receiverAccountId; // Replace Account entity with receiver account ID
 
     @Column(nullable = false)
     private BigDecimal amount;

@@ -12,16 +12,17 @@ public interface FundTransferService {
     List<FundTransfer> getTransactionsByUser(Long userId);
 
     // Get all transactions for an account
-    List<FundTransfer> getTransactionsByAccount(Long accountId);
+  //  List<FundTransfer> getTransactionsByAccount(Long accountId);
 
     // Get a specific transaction by its ID
-    FundTransfer getTransactionById(Long transactionId);
+  //  FundTransfer getTransactionById(Long transactionId);
 
     // Validate the transaction limit
-    boolean validateTransactionLimit(Long accountId);
+//    boolean validateTransactionLimit(Long accountId);
 
     // Schedule an autopay (optional)
-    void scheduleAutopay(FundTransfer transfer);
+    FundTransfer scheduleAutopay(FundTransfer transfer);
+
 
     // Update an autopay
     void updateAutopay(Long autopayId, FundTransfer transfer);

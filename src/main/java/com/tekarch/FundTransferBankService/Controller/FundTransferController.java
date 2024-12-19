@@ -21,7 +21,7 @@ public class FundTransferController {
         return ResponseEntity.ok(createdTransfer);
     }
 
-    // Get all transactions for a user (by userId)
+  /*  // Get all transactions for a user (by userId)
     @GetMapping("/transaction/{userId}")
     public ResponseEntity<List<FundTransfer>> getTransactionsByUser(@PathVariable Long userId) {
         List<FundTransfer> transactions = fundTransferService.getTransactionsByUser(userId);
@@ -47,14 +47,14 @@ public class FundTransferController {
     public ResponseEntity<Boolean> validateTransactionLimit(@PathVariable Long accountId) {
         boolean isValid = fundTransferService.validateTransactionLimit(accountId);
         return ResponseEntity.ok(isValid);
+    }*/
+
+    @PostMapping("/schedule-autopay")
+    public ResponseEntity<FundTransfer> scheduleAutopay(@RequestBody FundTransfer fundTransfer) {
+        FundTransfer savedAutopay = fundTransferService.scheduleAutopay(fundTransfer);
+        return ResponseEntity.ok(savedAutopay);
     }
 
-    // Optional: Manage scheduled transfers
-    @PostMapping("/schedule-autopay")
-    public ResponseEntity<String> scheduleAutopay(@RequestBody FundTransfer transfer) {
-        fundTransferService.scheduleAutopay(transfer);
-        return ResponseEntity.ok("Autopay scheduled successfully.");
-    }
 
     // Optional: Update existing autopay
     @PutMapping("/scheduled-autopay/{autopayId}")
