@@ -1,103 +1,245 @@
 package com.tekarch.FundTransferBankService.Services;
 
+import com.tekarch.FundTransferBankService.DTO.AccountDTO;
 import com.tekarch.FundTransferBankService.Model.FundTransfer;
 import com.tekarch.FundTransferBankService.Repository.FundTransferRepository;
 import com.tekarch.FundTransferBankService.Services.Interfaces.FundTransferService;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
+@RequiredArgsConstructor
 public class FundTransferServiceImpl implements FundTransferService {
 
-    @Autowired
-    private FundTransferRepository fundTransferRepository;
+    private static final Logger logger = LoggerFactory.getLogger(FundTransferServiceImpl.class);
+
+    @Value("${account.ms.url:http://localhost:8081/accounts}")
+    private String accountMsUrl;
+
+    private final RestTemplate restTemplate;
+    private final FundTransferRepository fundTransferRepository;
+    public boolean isAccountExists(Long accountId) {
+        String url = accountMsUrl + "/" + accountId;
+        try {
+            logger.info("Validating account existence for Account ID: {}", accountId);
+            ResponseEntity<AccountDTO> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    HttpEntity.EMPTY,
+                    AccountDTO.class
+            );
+            return response.getStatusCode() == HttpStatus.OK;
+        } catch (Exception e) {
+            logger.error("Error occurred while validating account existence for Account ID {}: {}", accountId, e.getMessage(), e);
+            return false;
+        }
+    }
 
     @Override
-    public FundTransfer initiateTransfer(FundTransfer transfer) {
-        // Perform validations
-        if (transfer.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Transfer amount must be greater than zero.");
+    public FundTransfer initiateTransfer(Long senderId, Long receiverId, BigDecimal amount) {
+        // Validate accounts
+        if (!isAccountExists(senderId) || !isAccountExists(receiverId)) {
+            throw new RuntimeException("Either sender or receiver account does not exist");
         }
 
-        // Set initial status and timestamps
+        FundTransfer transfer = new FundTransfer();
+        transfer.setSenderAccountId(senderId);
+        transfer.setReceiverAccountId(receiverId);
+        transfer.setAmount(amount);
         transfer.setStatus("pending");
         transfer.setInitiatedAt(LocalDateTime.now());
 
-        // Save the transfer object
         return fundTransferRepository.save(transfer);
     }
 
     @Override
-
-    public List<FundTransfer> getTransactionsByUser(Long userId) {
-        // Assuming `FundTransferRepository` has a method to fetch transactions by user ID
-        return fundTransferRepository.findBySenderAccountIdOrReceiverAccountId(userId, userId);
-    }
-/*
-    @Override
-    public List<FundTransfer> getTransactionsByAccount(Long accountId) {
-        // Assuming `FundTransferRepository` has a method to fetch transactions by account ID
-        return fundTransferRepository.findBySenderAccountIdOrReceiverAccountId(accountId, accountId);
+    public List<FundTransfer> getUserTransactions(Long userId, String type, BigDecimal minAmount, BigDecimal maxAmount) {
+        return fundTransferRepository.findAllByUserIdAndFilters(userId, type, minAmount, maxAmount);
     }
 
     @Override
-    public FundTransfer getTransactionById(Long transactionId) {
-        // Fetch and return the transaction by its ID
+    public List<FundTransfer> getAccountTransactions(Long accountId) {
+        return fundTransferRepository.findAllBySenderAccountIdOrReceiverAccountId(accountId, accountId);
+    }
+
+    @Override
+    public FundTransfer getTransactionDetails(Long transactionId) {
         return fundTransferRepository.findById(transactionId)
-                .orElseThrow(() -> new IllegalArgumentException("Transaction not found with ID: " + transactionId));
+                .orElseThrow(() -> new RuntimeException("Transaction not found"));
     }
 
     @Override
-    public boolean validateTransactionLimit(Long accountId, BigDecimal amount) {
-        // Assuming a predefined transaction limit, e.g., $10,000
-        BigDecimal transactionLimit = new BigDecimal("10000");
+    public BigDecimal getTransactionLimit(Long accountId) {
+        String url = accountMsUrl + "/" + accountId + "/transactionlimit";
+        try {
+            logger.info("Fetching transaction limit for Account ID: {}", accountId);
 
-        // Fetch today's transactions for the account
-        LocalDateTime startOfDay = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
-        List<FundTransfer> transactions = fundTransferRepository.findBySenderAccountIdAndInitiatedAtAfter(accountId, startOfDay);
+            ResponseEntity<BigDecimal> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    HttpEntity.EMPTY,
+                    BigDecimal.class
+            );
 
-        // Calculate total transferred amount for the day
-        BigDecimal totalTransferred = transactions.stream()
-                .map(FundTransfer::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        // Check if the new transfer exceeds the limit
-        return totalTransferred.add(amount).compareTo(transactionLimit) <= 0;
+            if (response.getStatusCode() == HttpStatus.OK) {
+                BigDecimal transactionLimit = response.getBody();
+                logger.info("Fetched transaction limit for Account ID {}: {}", accountId, transactionLimit);
+                return transactionLimit;
+            } else {
+                logger.warn("Could not fetch transaction limit for Account ID: {}", accountId);
+                return null;
+            }
+        } catch (Exception e) {
+            logger.error("Error while fetching transaction limit for Account ID {}: {}", accountId, e.getMessage(), e);
+            return null;
+        }
     }
 
-    @Override*/
-@Override
-public FundTransfer scheduleAutopay(FundTransfer transfer) {
-    transfer.setStatus("scheduled");
-    transfer.setInitiatedAt(LocalDateTime.now());
-    return fundTransferRepository.save(transfer);
-}
+    @Override
+    public FundTransfer scheduleTransfer(Long senderId, Long receiverId, BigDecimal amount, LocalDate scheduleDate) {
+        if (!isAccountExists(senderId) || !isAccountExists(receiverId)) {
+            throw new RuntimeException("Either sender or receiver account does not exist");
+        }
 
+        FundTransfer transfer = new FundTransfer();
+        transfer.setSenderAccountId(senderId);
+        transfer.setReceiverAccountId(receiverId);
+        transfer.setAmount(amount);
+        transfer.setStatus("scheduled");
+        transfer.setScheduledAt(scheduleDate);
+        transfer.setInitiatedAt(LocalDateTime.now());
+
+        return fundTransferRepository.save(transfer);
+    }
 
     @Override
-    public void updateAutopay(Long autopayId, FundTransfer transfer) {
-        // Fetch the existing autopay record
-        FundTransfer existingAutopay = fundTransferRepository.findById(autopayId)
-                .orElseThrow(() -> new IllegalArgumentException("Autopay not found with ID: " + autopayId));
+    public FundTransfer setupRecurringTransfer(Long senderId, Long receiverId, BigDecimal amount, String frequency) {
+        if (!isAccountExists(senderId) || !isAccountExists(receiverId)) {
+            throw new RuntimeException("Either sender or receiver account does not exist");
+        }
 
-        // Update necessary fields and save
-        existingAutopay.setAmount(transfer.getAmount());
-        existingAutopay.setReceiverAccountId(transfer.getReceiverAccountId());
-        fundTransferRepository.save(existingAutopay);
+        if (!isValidFrequency(frequency)) {
+            throw new IllegalArgumentException("Invalid frequency: " + frequency);
+        }
+
+        FundTransfer transfer = new FundTransfer();
+        transfer.setSenderAccountId(senderId);
+        transfer.setReceiverAccountId(receiverId);
+        transfer.setAmount(amount);
+        transfer.setFrequency(frequency);
+        transfer.setStatus("recurring");
+        transfer.setInitiatedAt(LocalDateTime.now());
+
+        return fundTransferRepository.save(transfer);
+    }
+
+    @Override
+    public FundTransfer getScheduledOrRecurringTransfer(Long transferId) {
+        logger.info("Fetching scheduled or recurring transfer with ID: {}", transferId);
+        return fundTransferRepository.findById(transferId)
+                .orElseThrow(() -> new RuntimeException("Scheduled or Recurring Transfer not found for ID: " + transferId));
+    }
+
+    @Override
+    public void cancelTransfer(Long transferId) {
+        logger.info("Attempting to cancel transfer with ID: {}", transferId);
+
+        FundTransfer transfer = fundTransferRepository.findById(transferId)
+                .orElseThrow(() -> new RuntimeException("Transfer not found for ID: " + transferId));
+
+        if ("completed".equalsIgnoreCase(transfer.getStatus())) {
+            throw new IllegalStateException("Cannot cancel a completed transfer");
+        }
+
+        if ("canceled".equalsIgnoreCase(transfer.getStatus())) {
+            throw new IllegalStateException("Transfer is already canceled");
+        }
+
+        transfer.setStatus("canceled");
+        transfer.setCancelledAt(LocalDateTime.now());
+
+        fundTransferRepository.save(transfer);
+
+        logger.info("Transfer with ID {} has been successfully canceled.", transferId);
+    }
+
+    @Override
+    public FundTransfer scheduleAutopay(Long senderId, Long receiverId, BigDecimal amount, LocalDate scheduleDate) {
+        if (!isAccountExists(senderId)) {
+            throw new RuntimeException("Sender account does not exist.");
+        }
+
+        if (!isAccountExists(receiverId)) {
+            throw new RuntimeException("Receiver account does not exist.");
+        }
+
+        if (scheduleDate.isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("Schedule date cannot be in the past.");
+        }
+
+        FundTransfer autopay = new FundTransfer();
+        autopay.setSenderAccountId(senderId);
+        autopay.setReceiverAccountId(receiverId);
+        autopay.setAmount(amount);
+        autopay.setStatus("scheduled");
+        autopay.setInitiatedAt(LocalDateTime.now());
+        autopay.setScheduledAt(scheduleDate);
+
+        return fundTransferRepository.save(autopay);
+    }
+
+    @Override
+    public FundTransfer updateAutopay(Long autopayId, Long senderId, Long receiverId, BigDecimal amount, LocalDate newScheduleDate) {
+        FundTransfer autopay = fundTransferRepository.findById(autopayId)
+                .orElseThrow(() -> new RuntimeException("Autopay with ID " + autopayId + " not found"));
+
+        if (senderId != null) {
+            autopay.setSenderAccountId(senderId);
+        }
+
+        if (receiverId != null) {
+            autopay.setReceiverAccountId(receiverId);
+        }
+
+        if (amount != null) {
+            autopay.setAmount(amount);
+        }
+
+        if (newScheduleDate != null) {
+            autopay.setScheduledAt(newScheduleDate);
+        }
+
+        return fundTransferRepository.save(autopay);
     }
 
     @Override
     public void cancelAutopay(Long autopayId) {
-        // Fetch the autopay record
-        FundTransfer existingAutopay = fundTransferRepository.findById(autopayId)
-                .orElseThrow(() -> new IllegalArgumentException("Autopay not found with ID: " + autopayId));
+        FundTransfer autopay = fundTransferRepository.findById(autopayId)
+                .orElseThrow(() -> new RuntimeException("Autopay with ID " + autopayId + " not found"));
 
-        // Update status to "cancelled" and save
-        existingAutopay.setStatus("cancelled");
-        fundTransferRepository.save(existingAutopay);
+        autopay.setCancelledAt(LocalDateTime.now());
+        autopay.setStatus("canceled");
+
+        fundTransferRepository.save(autopay);
+    }
+
+    private boolean isValidFrequency(String frequency) {
+        return "daily".equalsIgnoreCase(frequency) ||
+                "weekly".equalsIgnoreCase(frequency) ||
+                "monthly".equalsIgnoreCase(frequency) ||
+                "yearly".equalsIgnoreCase(frequency);
     }
 }
