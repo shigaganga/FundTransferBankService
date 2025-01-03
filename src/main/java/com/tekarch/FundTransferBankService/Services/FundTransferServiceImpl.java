@@ -26,7 +26,7 @@ public class FundTransferServiceImpl implements FundTransferService {
 
     private static final Logger logger = LoggerFactory.getLogger(FundTransferServiceImpl.class);
 
-    @Value("${account.ms.url:http://localhost:8081/accounts}")
+    @Value("${account.ms.url}")
     private String accountMsUrl;
 
     private final RestTemplate restTemplate;
