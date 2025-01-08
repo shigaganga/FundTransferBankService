@@ -4,6 +4,8 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -33,8 +35,10 @@ public class FundTransfer {
     private String status = "pending"; // Default value
 
     @Column(nullable = false, updatable = false)
-    private LocalDateTime initiatedAt = LocalDateTime.now(); // Default value - CURRENT_TIMESTAMP
+    @CreationTimestamp
+    private LocalDateTime initiatedAt = LocalDateTime.now();// Default value - CURRENT_TIMESTAMP
     private LocalDate scheduledAt; // Add this field for scheduling transfers
+    @UpdateTimestamp
     private LocalDateTime completedAt; // Nullable, will be populated when transfer is completed
     private LocalDateTime cancelledAt;  // Add this field for cancellations
    private String frequency; // Optional, for recurring transfers
